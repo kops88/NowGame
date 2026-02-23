@@ -15,7 +15,9 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF121212),
         cardColor: const Color(0xFF1E1E1E),
       ),
-      home: const DashboardScreen(),
+      home: Scaffold(
+        body: DashboardScreen(),
+      ),
     );
   }
 }
@@ -26,6 +28,9 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+          title: Text('主页', style: TextStyle(color: Colors.white)),
+        ),
       body: SafeArea(
         // 使用 ListView 构建垂直滚动的卡片流
         child: ListView(
@@ -57,42 +62,141 @@ class DashboardScreen extends StatelessWidget {
             ],
           ),
         ),
+        bottomNavigationBar: Container(
+          color: Colors.grey,
+          height: 65,
+          child: Center(
+            child: Text('底部区域'),
+          ),
+        ),
       );
   }
 }
 
 // -----------------------------------------------------------------------------
-// 1. 时间模块：TimeRingsWidget
+// 1. 时间模块：TimeRingsWidget (CustomPainter 实现)
 // -----------------------------------------------------------------------------
 class TimeRingsWidget extends StatelessWidget {
   const TimeRingsWidget({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // 模拟测试数据 (0.0 - 1.0)
+    final progressData = [
+      0.35, // 人生进度 (红) - 假设35岁/80岁
+      0.75, // 今年进度 (橙) - 假设9月
+      0.60, // 本月进度 (黄) - 假设20号
+      0.40, // 本周进度 (绿) - 假设周三
+      0.80, // 今日进度 (青) - 假设晚上
+    ];
+
+    // 环的颜色定义
+    final ringColors = [
+      const Color(0xFFD32F2F), // Life: 深红
+      Colors.orange,           // Year: 橙色
+      Colors.yellow,           // Month: 黄色
+      Colors.green,            // Week: 绿色
+      Colors.cyan,             // Day: 青色/蓝色
+    ];
+
     return Container(
-      height: 300, // 预估高度
+      height: 320, // 稍微增加高度以容纳圆环
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.access_time, size: 48, color: Colors.orange),
-            SizedBox(height: 8),
-            Text(
-              'Time Rings (5 Layers)',
-              style: TextStyle(color: Colors.white70),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // 自定义绘制层
+          CustomPaint(
+            size: const Size(280, 280), // 画布大小
+            painter: TimeRingsPainter(
+              progressData: progressData,
+              ringColors: ringColors,
+              backgroundColor: const Color(0xFF2C2C2C), // 深灰色底色
             ),
-            Text(
-              'Life / Year / Month / Week / Day',
-              style: TextStyle(color: Colors.white30, fontSize: 12),
-            ),
-          ],
-        ),
+          ),
+          // 中心文案
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'Today',
+                style: TextStyle(color: Colors.white30, fontSize: 12),
+              ),
+              Text(
+                '4h left', // 模拟倒计时
+                style: TextStyle(
+                  color: Colors.white, 
+                  fontSize: 24, 
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
+  }
+}
+
+class TimeRingsPainter extends CustomPainter {
+  final List<double> progressData;
+  final List<Color> ringColors;
+  final Color backgroundColor;
+
+  TimeRingsPainter({
+    required this.progressData,
+    required this.ringColors,
+    required this.backgroundColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = size.width / 2;
+    const strokeWidth = 18.0; // 环的粗细，文档要求稍微粗一些
+    const gap = 4.0;          // 环之间的间距
+
+    // 从外向内绘制，最外层是第0个数据
+    for (int i = 0; i < progressData.length; i++) {
+      final radius = maxRadius - (i * (strokeWidth + gap));
+      final progress = progressData[i].clamp(0.0, 1.0); // 确保在 0~1 之间
+      final color = ringColors[i];
+
+      // 1. 绘制底色环 (未完成部分)
+      final bgPaint = Paint()
+        ..color = backgroundColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawCircle(center, radius, bgPaint);
+
+      // 2. 绘制进度环 (已完成部分)
+      // -pi/2 是 12点钟方向
+      final progressPaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      final sweepAngle = 2 * 3.141592653589793 * progress;
+      
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -3.141592653589793 / 2, // 起始角度：12点钟
+        sweepAngle,             // 扫过角度
+        false,                  // useCenter: false (空心)
+        progressPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant TimeRingsPainter oldDelegate) {
+    return oldDelegate.progressData != progressData;
   }
 }
 
