@@ -7,6 +7,7 @@ const Color MonthTimeColor = Colors.yellow;
 const Color WeekTimeColor = Colors.cyan;
 const Color DayTimeColor = Colors.green;
 
+
 const strokeWidth = 18.0; // 环的粗细，文档要求稍微粗一些
 const gap = 4.0;          // 环之间的间距
 
