@@ -1,4 +1,6 @@
 # Miscellaneous
+windows/
+.metadata
 *.class
 *.log
 *.pyc
