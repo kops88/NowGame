@@ -1,20 +1,60 @@
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:nowgame/Util/DebugWidget.dart';
+import 'package:nowgame/MainWidget/ChartDetailDialog.dart';
 
-class HealthCardWidget extends StatelessWidget {
+class HealthCardWidget extends StatefulWidget {
   const HealthCardWidget({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // 随机生成 7 天的数据 (60-98之间)
+  State<HealthCardWidget> createState() => _HealthCardWidgetState();
+}
+
+class _HealthCardWidgetState extends State<HealthCardWidget> {
+  late List<FlSpot> _dataPoints;
+  final GlobalKey _chartKey = GlobalKey(); // 用于获取折线图位置
+
+  @override
+  void initState() {
+    super.initState();
+    _generateData();
+  }
+
+  void _generateData() {
     final random = Random();
-    final dataPoints = List.generate(10, (index) {
+    _dataPoints = List.generate(10, (index) {
       return FlSpot(index.toDouble(), 60 + random.nextDouble() * 38);
     });
+  }
 
+  void _showChartDetail() {
+    // 获取折线图的全局位置和尺寸
+    final RenderBox? box =
+        _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final Offset position = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    final Rect sourceRect =
+        Rect.fromLTWH(position.dx, position.dy, size.width, size.height);
+
+    ChartDetailDialog.show(
+      context,
+      dataPoints: _dataPoints,
+      sourceRect: sourceRect,
+      onDataChanged: (newData) {
+        setState(() {
+          _dataPoints = newData;
+        });
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      height: 220, // 稍微增加高度
+      height: 420, // 增加卡片高度，让折线图有更大的显示空间
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -27,36 +67,59 @@ class HealthCardWidget extends StatelessWidget {
             children: const [
               Icon(Icons.favorite, color: Colors.redAccent),
               SizedBox(width: 8),
-              Text('Health', style: TextStyle(fontWeight: FontWeight.bold)),
+              MText('Health', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 16),
           
-          // 折线图区域
+          // 折线图区域 - 点击触发弹出层
           Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(show: false), // 不显示网格
-                titlesData: FlTitlesData(show: false), // 不显示轴标题
-                borderData: FlBorderData(show: false), // 不显示边框
-                minX: 0,
-                maxX: 9,
-                minY: 50,
-                maxY: 100,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: dataPoints, 
-                    isCurved: true, // 平滑曲线
-                    color: Colors.redAccent,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(show: false), // 不显示数据点
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: Colors.redAccent.withOpacity(0.1), // 红色渐变填充
-                    ),
+            child: GestureDetector(
+              key: _chartKey, // 添加 GlobalKey 以获取位置
+              behavior: HitTestBehavior.opaque,
+              onTap: _showChartDetail,
+              child: AbsorbPointer(
+                child: LineChart(
+                  LineChartData(
+                    gridData: const FlGridData(show: false),
+                    titlesData: const FlTitlesData(show: false),
+                    borderData: FlBorderData(show: false),
+                    lineTouchData: const LineTouchData(enabled: false), // 禁用图表触摸
+                    minX: 0,
+                    maxX: 9,
+                    minY: 0,   // Y轴最小值固定为 0
+                    maxY: 100, // Y轴最大值固定为 100
+                    clipData: const FlClipData.all(), // 裁剪超出范围的数据
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: _dataPoints, 
+                        isCurved: true,
+                        color: Colors.pinkAccent,
+                        barWidth: 3,
+                        isStrokeCapRound: true,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          // 设置填充的截止位置（阈值）
+                          cutOffY: 0.0,
+                          applyCutOffY: true,
+                          // 三段式渐变填充（与放大后一致）
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.pinkAccent.withValues(alpha: 0.4), // 顶部最深色
+                              Colors.pinkAccent.withValues(alpha: 0.2), // 顶部区域末尾
+                              Colors.pinkAccent.withValues(alpha: 0.0), // 中间区域末尾（渐变到透明）
+                              Colors.pinkAccent.withValues(alpha: 0.0), // 底部区域开始（保持透明）
+                            ],
+                            stops: const [0.0, 0.5, 0.8, 1.0],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -79,7 +142,7 @@ class HealthCardWidget extends StatelessWidget {
   Widget _buildStatItem(String label, String value, {bool isPrimary = false}) {
     return Column(
       children: [
-        Text(
+        MText(
           value,
           style: TextStyle(
             fontSize: isPrimary ? 24 : 18,
@@ -87,7 +150,7 @@ class HealthCardWidget extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        Text(
+        MText(
           label,
           style: const TextStyle(
             fontSize: 12,
