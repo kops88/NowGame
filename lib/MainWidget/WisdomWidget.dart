@@ -1,5 +1,7 @@
 
 import 'package:flutter/material.dart';
+import 'package:nowgame/MainWidget/TimeRingWidget.dart';
+import 'package:nowgame/Util/DebugWidget.dart';
 
 class WisdomSkillsWidget extends StatelessWidget {
   const WisdomSkillsWidget({Key? key}) : super(key: key);
@@ -25,7 +27,7 @@ class WisdomSkillsWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Wisdom / Skills', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const MText('Wisdom / Skills', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline, color: Colors.white70),
                 onPressed: () {
@@ -105,12 +107,12 @@ class _SkillCardWidgetState extends State<SkillCardWidget> {
                 Icon(widget.skill.icon, color: Colors.white70, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
+                  child: MText(
                     widget.skill.name,
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
-                Text(
+                MText(
                   'Lv. ${widget.skill.level}',
                   style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
                 ),
@@ -134,11 +136,11 @@ class _SkillCardWidgetState extends State<SkillCardWidget> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        MText(
                           'Experience',
                           style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5)),
                         ),
-                        Text(
+                        MText(
                           '${widget.skill.currentXp} / ${widget.skill.requiredXp} XP',
                           style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7)),
                         ),
@@ -164,7 +166,7 @@ class _SkillCardWidgetState extends State<SkillCardWidget> {
                             // TODO: 增加经验逻辑
                           },
                           icon: const Icon(Icons.timer, size: 16),
-                          label: const Text('Practice'),
+                          label: const MText('Practice'),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.orangeAccent,
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

@@ -6,6 +6,7 @@ import 'package:nowgame/MainWidget/MoneyAndInfluence.dart';
 import 'dart:math';
 import 'package:nowgame/MainWidget/TimeRingWidget.dart';
 import 'package:nowgame/MainWidget/WisdomWidget.dart';
+import 'package:nowgame/Util/DebugWidget.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '人生卷轴',
+      title: 'xxxx',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),
         cardColor: const Color(0xFF1E1E1E),
@@ -36,7 +37,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: Text('主页', style: TextStyle(color: Colors.white)),
+          title: MText('主页', style: TextStyle(color: Colors.white)),
         ),
       body: SafeArea(
         child: ListView(
@@ -64,7 +65,7 @@ class DashboardScreen extends StatelessWidget {
           color: Colors.grey,
           height: 65,
           child: Center(
-            child: Text('底部区域'),
+            child: MText('底部区域'),
           ),
         ),
       );

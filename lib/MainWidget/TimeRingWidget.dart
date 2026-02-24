@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:nowgame/Util/DebugWidget.dart';
 
 const Color LifeTimeColor = Color(0xFFD32F2F);
 const Color YearTimeColor = Colors.orange;
@@ -13,6 +14,7 @@ const gap = 4.0;          // 环之间的间距
 
 const double GrayDensity = 0.7; // 圆环未完成部分的灰度
 const double RadiusRatio = 2.7; // 圆环半径 = size.width / RadiusRatio
+
 
 
 class TimeRingsWidget extends StatelessWidget {
@@ -110,11 +112,15 @@ class TimeRingsWidget extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildStatLine('本月', '${remain[0]}/${totals[0]}', '天', MonthTimeColor),
+                    _buildStatLine('人生', '${remain[0]}/${totals[0]}', '天', LifeTimeColor),
                     const SizedBox(height: 12),
-                    _buildStatLine('本周', '${remain[1]}/${totals[1]}', '天', WeekTimeColor),
+                    _buildStatLine('本年', '${remain[1]}/${totals[1]}', '天', YearTimeColor),
                     const SizedBox(height: 12),
-                    _buildStatLine('今日', '${remain[2]}/${totals[2]}', '小时', DayTimeColor),
+                    _buildStatLine('本月', '${remain[2]}/${totals[2]}', '天', MonthTimeColor),
+                    const SizedBox(height: 12),
+                    _buildStatLine('本周', '${remain[3]}/${totals[3]}', '天', WeekTimeColor),
+                    const SizedBox(height: 12),
+                    _buildStatLine('今日', '${remain[4]}/${totals[4]}', '小时', DayTimeColor),
                   ],
                 ),
             ),
@@ -194,7 +200,7 @@ Widget _buildStatLine(String label, String value, String unit, Color color) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
+      MText(
         label,
         style: const TextStyle(
           fontSize: 20,
@@ -257,7 +263,7 @@ class _VerticalRemainBar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        MText(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 6),
         Stack(
           alignment: Alignment.bottomCenter,
@@ -281,7 +287,7 @@ class _VerticalRemainBar extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        Text(
+        MText(
           '$remainDays/$totalDays 天',
           style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
         ),

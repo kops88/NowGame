@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nowgame/Util/DebugWidget.dart';
 
 class MainQuestListWidget extends StatelessWidget {
   const MainQuestListWidget({Key? key}) : super(key: key);
@@ -10,7 +11,7 @@ class MainQuestListWidget extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 4, bottom: 12),
-          child: Text('Main Quests', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          child: MText('Main Quests', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ),
         // 模拟任务列表
         _buildQuestItem(Icons.fitness_center, 'Lose 5kg', '31 days left', 0.3),
@@ -47,7 +48,7 @@ class MainQuestListWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                MText(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
                   value: progress,
@@ -60,7 +61,7 @@ class MainQuestListWidget extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           // 右侧倒计时
-          Text(deadline, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          MText(deadline, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
         ],
       ),
     );

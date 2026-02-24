@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nowgame/Util/DebugWidget.dart';
 
 class MoneyAndInfluenceRow extends StatelessWidget {
   const MoneyAndInfluenceRow({Key? key}) : super(key: key);
@@ -22,8 +23,8 @@ class MoneyAndInfluenceRow extends StatelessWidget {
               children: const [
                 Icon(Icons.attach_money, color: Colors.blue),
                 SizedBox(height: 8),
-                Text('Money', style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('Monthly Salary', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                MText('Money', style: TextStyle(fontWeight: FontWeight.bold)),
+                MText('Monthly Salary', style: TextStyle(fontSize: 12, color: Colors.white70)),
               ],
             ),
           ),
@@ -43,8 +44,8 @@ class MoneyAndInfluenceRow extends StatelessWidget {
               children: const [
                 Icon(Icons.lock_outline, color: Colors.grey),
                 SizedBox(height: 8),
-                Text('Influence', style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('Locked (Lv.10)', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                MText('Influence', style: TextStyle(fontWeight: FontWeight.bold)),
+                MText('Locked (Lv.10)', style: TextStyle(fontSize: 12, color: Colors.white70)),
               ],
             ),
           ),
