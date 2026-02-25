@@ -6,6 +6,7 @@ import 'package:nowgame/MainWidget/MoneyAndInfluence.dart';
 import 'dart:math';
 import 'package:nowgame/MainWidget/TimeRingWidget.dart';
 import 'package:nowgame/MainWidget/WisdomWidget.dart';
+import 'package:nowgame/MainWidget/TaskCard.dart';
 import 'package:nowgame/Util/DebugWidget.dart';
 
 void main() {
@@ -57,6 +58,9 @@ class DashboardScreen extends StatelessWidget {
               SizedBox(height: 16),
               // 5. 底部行动区：主线任务
               MainQuestListWidget(),
+              SizedBox(height: 16),
+              // 6. 任务卡片区域
+              TaskCardList(),
               SizedBox(height: 32),
             ],
           ),
