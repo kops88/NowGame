@@ -6,235 +6,12 @@
  * @FilePath: \NowGame\lib\MainWidget\ChartDetailDialog.dart
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
-import 'dart:convert';
 import 'dart:ui';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-/// 每日健康数据模型
-class DayHealthData {
-  int? baseScore; // 基准分数 0-100
-  int visionDeduction; // 视力扣分累计
-  int neckDeduction; // 颈部扣分累计
-  int waistDeduction; // 腰部扣分累计
-  DateTime date; // 日期
-  DateTime? visionClickTime; // 视力按钮点击时间
-  DateTime? neckClickTime; // 颈按钮点击时间
-  DateTime? waistClickTime; // 腰按钮点击时间
-
-  DayHealthData({
-    this.baseScore,
-    this.visionDeduction = 0,
-    this.neckDeduction = 0,
-    this.waistDeduction = 0,
-    required this.date,
-    this.visionClickTime,
-    this.neckClickTime,
-    this.waistClickTime,
-  });
-
-  /// 获取当日最终分数（基准 - 各项扣分）
-  int? get finalScore {
-    if (baseScore == null) return null;
-    return (baseScore! - visionDeduction - neckDeduction - waistDeduction)
-        .clamp(0, 100);
-  }
-
-  /// 复制并修改
-  DayHealthData copyWith({
-    int? baseScore,
-    int? visionDeduction,
-    int? neckDeduction,
-    int? waistDeduction,
-    DateTime? date,
-    DateTime? visionClickTime,
-    DateTime? neckClickTime,
-    DateTime? waistClickTime,
-    bool clearVisionClick = false,
-    bool clearNeckClick = false,
-    bool clearWaistClick = false,
-  }) {
-    return DayHealthData(
-      baseScore: baseScore ?? this.baseScore,
-      visionDeduction: visionDeduction ?? this.visionDeduction,
-      neckDeduction: neckDeduction ?? this.neckDeduction,
-      waistDeduction: waistDeduction ?? this.waistDeduction,
-      date: date ?? this.date,
-      visionClickTime: clearVisionClick ? null : (visionClickTime ?? this.visionClickTime),
-      neckClickTime: clearNeckClick ? null : (neckClickTime ?? this.neckClickTime),
-      waistClickTime: clearWaistClick ? null : (waistClickTime ?? this.waistClickTime),
-    );
-  }
-
-  /// 转换为 JSON
-  Map<String, dynamic> toJson() => {
-    'baseScore': baseScore,
-    'visionDeduction': visionDeduction,
-    'neckDeduction': neckDeduction,
-    'waistDeduction': waistDeduction,
-    'date': date.toIso8601String(),
-    'visionClickTime': visionClickTime?.toIso8601String(),
-    'neckClickTime': neckClickTime?.toIso8601String(),
-    'waistClickTime': waistClickTime?.toIso8601String(),
-  };
-
-  /// 从 JSON 创建
-  factory DayHealthData.fromJson(Map<String, dynamic> json) => DayHealthData(
-    baseScore: json['baseScore'] as int?,
-    visionDeduction: json['visionDeduction'] as int? ?? 0,
-    neckDeduction: json['neckDeduction'] as int? ?? 0,
-    waistDeduction: json['waistDeduction'] as int? ?? 0,
-    date: DateTime.parse(json['date'] as String),
-    visionClickTime: json['visionClickTime'] != null 
-        ? DateTime.parse(json['visionClickTime'] as String) 
-        : null,
-    neckClickTime: json['neckClickTime'] != null 
-        ? DateTime.parse(json['neckClickTime'] as String) 
-        : null,
-    waistClickTime: json['waistClickTime'] != null 
-        ? DateTime.parse(json['waistClickTime'] as String) 
-        : null,
-  );
-}
-
-/// 健康数据管理器（支持持久化存储）
-class HealthDataManager {
-  static final HealthDataManager _instance = HealthDataManager._internal();
-  factory HealthDataManager() => _instance;
-  HealthDataManager._internal();
-
-  static const String _storageKey = 'health_data_map';
-  static const int _resetHour = 7; // 每天早上7点重置
-
-  final Map<String, DayHealthData> _dataMap = {};
-  bool _isInitialized = false;
-
-  String _dateKey(DateTime date) =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-  /// 初始化（从持久化存储加载数据）
-  Future<void> init() async {
-    if (_isInitialized) return;
-    
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_storageKey);
-    
-    if (jsonStr != null) {
-      try {
-        final Map<String, dynamic> jsonMap = jsonDecode(jsonStr);
-        jsonMap.forEach((key, value) {
-          _dataMap[key] = DayHealthData.fromJson(value as Map<String, dynamic>);
-        });
-      } catch (e) {
-        debugPrint('加载健康数据失败: $e');
-      }
-    }
-    
-    _isInitialized = true;
-  }
-
-  /// 保存到持久化存储
-  Future<void> _saveToStorage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonMap = <String, dynamic>{};
-    _dataMap.forEach((key, value) {
-      jsonMap[key] = value.toJson();
-    });
-    await prefs.setString(_storageKey, jsonEncode(jsonMap));
-  }
-
-  /// 获取指定日期的数据
-  DayHealthData getDataForDate(DateTime date) {
-    final key = _dateKey(date);
-    return _dataMap[key] ?? DayHealthData(date: date);
-  }
-
-  /// 保存指定日期的数据
-  Future<void> saveDataForDate(DayHealthData data) async {
-    final key = _dateKey(data.date);
-    _dataMap[key] = data;
-    await _saveToStorage();
-  }
-
-  /// 获取最近有效的基准分数（向前查找）
-  int? getInheritedBaseScore() {
-    final now = DateTime.now();
-    // 最多向前查找30天
-    for (int i = 0; i < 30; i++) {
-      final date = now.subtract(Duration(days: i));
-      final key = _dateKey(date);
-      final data = _dataMap[key];
-      if (data?.baseScore != null) {
-        return data!.baseScore;
-      }
-    }
-    return null;
-  }
-
-  /// 获取昨天的最终分数（作为今日基准）
-  int? getYesterdayFinalScore() {
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    final key = _dateKey(yesterday);
-    final data = _dataMap[key];
-    
-    if (data != null && data.baseScore != null) {
-      // 返回昨天的最终分数（基准 - 扣分）
-      return (data.baseScore! - data.visionDeduction - data.neckDeduction - data.waistDeduction).clamp(0, 100);
-    }
-    
-    // 如果昨天没有数据，继续向前查找最近有数据的一天
-    for (int i = 2; i <= 30; i++) {
-      final date = DateTime.now().subtract(Duration(days: i));
-      final dateKey = _dateKey(date);
-      final dateData = _dataMap[dateKey];
-      if (dateData != null && dateData.baseScore != null) {
-        return (dateData.baseScore! - dateData.visionDeduction - dateData.neckDeduction - dateData.waistDeduction).clamp(0, 100);
-      }
-    }
-    
-    return null;
-  }
-
-  /// 获取今日有效的基准分数（自动继承昨天的最终分数）
-  int? getTodayEffectiveBaseScore() {
-    final today = getDataForDate(DateTime.now());
-    if (today.baseScore != null) return today.baseScore;
-    return getYesterdayFinalScore();
-  }
-
-  /// 检查按钮是否可点击（基于重置时间判断）
-  bool canClickButton(String type, DayHealthData data) {
-    DateTime? clickTime;
-    switch (type) {
-      case 'vision':
-        clickTime = data.visionClickTime;
-        break;
-      case 'neck':
-        clickTime = data.neckClickTime;
-        break;
-      case 'waist':
-        clickTime = data.waistClickTime;
-        break;
-    }
-
-    if (clickTime == null) return true;
-
-    final now = DateTime.now();
-    final todayResetTime = DateTime(now.year, now.month, now.day, _resetHour);
-    
-    // 如果当前时间已过今天的重置时间
-    if (now.isAfter(todayResetTime)) {
-      // 点击时间在今天重置时间之前，则可以点击
-      return clickTime.isBefore(todayResetTime);
-    } else {
-      // 当前时间在今天重置时间之前，检查是否在昨天重置时间之后点击过
-      final yesterdayResetTime = todayResetTime.subtract(const Duration(days: 1));
-      return clickTime.isBefore(yesterdayResetTime);
-    }
-  }
-}
+import 'package:nowgame/Model/DayHealthData.dart';
+import 'package:nowgame/Service/HealthService.dart';
 
 /// iOS 风格的图表详情弹出层 - Hero 风格展开/收起动画
 class ChartDetailDialog extends StatefulWidget {
@@ -285,7 +62,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
 
   // 扣分项标记点颜色
   static const Color _visionColor = Color(0xFF4A148C); // 深紫色
-  static const Color _neckColor = Color(0xFFE65100); // 深橘色
+  static const Color _neckColor = Color(0xFFE65100); // 深橙色
   static const Color _waistColor = Color(0xFF1B5E20); // 深绿色
 
   late AnimationController _controller;
@@ -302,7 +79,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
   static const double _optionWidth = 160.0; // 选项框宽度
 
   // 健康数据管理
-  final HealthDataManager _healthManager = HealthDataManager();
+  final HealthService _healthService = HealthService();
   late DayHealthData _todayData;
   late List<FlSpot> _currentDataPoints;
   bool _isLoading = true;
@@ -313,7 +90,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
 
     _currentDataPoints = List.from(widget.dataPoints);
 
-    // 异步初始化数据
+    // 初始化数据
     _initData();
 
     _controller = AnimationController(
@@ -361,12 +138,11 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     _controller.forward();
   }
 
-  /// 异步初始化数据
-  Future<void> _initData() async {
-    await _healthManager.init();
+  /// 初始化数据（HealthService 已由 Bootstrap 初始化完成，直接读取）
+  void _initData() {
     if (mounted) {
       setState(() {
-        _todayData = _healthManager.getDataForDate(DateTime.now());
+        _todayData = _healthService.getDataForDate(DateTime.now());
         _isLoading = false;
         
         // 调试日志：显示今日数据状态
@@ -423,7 +199,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     if (_isLoading) return;
     
     // 获取当前显示的基准分数（可能是继承的昨天最终分数）
-    final effectiveBase = _todayData.baseScore ?? _healthManager.getYesterdayFinalScore();
+    final effectiveBase = _todayData.baseScore ?? _healthService.getYesterdayFinalScore();
     final TextEditingController textController = TextEditingController(
       text: effectiveBase?.toString() ?? '',
     );
@@ -472,7 +248,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
               }
             },
             child: const Text(
-              '确认',
+              '确定',
               style: TextStyle(color: Colors.pinkAccent),
             ),
           ),
@@ -483,7 +259,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     if (result != null) {
       setState(() {
         _todayData = _todayData.copyWith(baseScore: result);
-        _healthManager.saveDataForDate(_todayData);
+        _healthService.saveDataForDate(_todayData);
         _updateChartData();
       });
     }
@@ -492,7 +268,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
   /// 检查按钮是否可点击
   bool _canClickButton(String type) {
     if (_isLoading) return false;
-    return _healthManager.canClickButton(type, _todayData);
+    return _healthService.canClickButton(type, _todayData);
   }
 
   /// 处理扣分项点击（视力/颈/腰）
@@ -506,7 +282,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     }
 
     // 获取有效的基准分数（自动继承昨天的最终分数）
-    int? effectiveBase = _todayData.baseScore ?? _healthManager.getYesterdayFinalScore();
+    int? effectiveBase = _todayData.baseScore ?? _healthService.getYesterdayFinalScore();
     
     // 如果没有任何可用的基准分数，默认使用100作为起始分
     effectiveBase ??= 100;
@@ -520,7 +296,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     final now = DateTime.now();
     setState(() {
       const int deduction = 5;
-      debugPrint('🔻 [Deduction] type: $type, deduction: $deduction');
+      debugPrint('🔴 [Deduction] type: $type, deduction: $deduction');
       switch (type) {
         case 'vision':
           _todayData = _todayData.copyWith(
@@ -541,7 +317,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
           );
           break;
       }
-      _healthManager.saveDataForDate(_todayData);
+      _healthService.saveDataForDate(_todayData);
       _updateChartData();
     });
   }
@@ -551,7 +327,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     if (_isLoading) return;
     
     // 获取有效的最终分数（优先使用昨天的最终分数）
-    final effectiveBase = _todayData.baseScore ?? _healthManager.getYesterdayFinalScore() ?? 100;
+    final effectiveBase = _todayData.baseScore ?? _healthService.getYesterdayFinalScore() ?? 100;
     if (_currentDataPoints.isNotEmpty) {
       final totalDeduction = _todayData.visionDeduction + 
           _todayData.neckDeduction + 
@@ -579,7 +355,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     }
 
     // 获取有效的基准分数（优先使用昨天的最终分数，默认100）
-    final effectiveBase = _todayData.baseScore ?? _healthManager.getYesterdayFinalScore() ?? 100;
+    final effectiveBase = _todayData.baseScore ?? _healthService.getYesterdayFinalScore() ?? 100;
 
     final todayX = _currentDataPoints.last.x;
     final baseY = effectiveBase.toDouble();
@@ -822,7 +598,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
     final canClickWaist = _canClickButton('waist');
     
     // 获取有效的基准分数（显示用）
-    final effectiveBase = _isLoading ? null : (_todayData.baseScore ?? _healthManager.getYesterdayFinalScore());
+    final effectiveBase = _isLoading ? null : (_todayData.baseScore ?? _healthService.getYesterdayFinalScore());
 
     return GestureDetector(
       onTap: () {}, // 阻止点击穿透

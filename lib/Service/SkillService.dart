@@ -1,33 +1,73 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nowgame/Dto/WisdomDto.dart';
 import 'package:nowgame/Model/SkillData.dart';
+import 'package:nowgame/Repository/WisdomRepository.dart';
 
 /// 技能数据服务
-/// 负责技能数据的增删改查与持久化
-/// 使用 ChangeNotifier 支持响应式 UI 更新
+///
+/// 定位：Wisdom 领域的技能卡业务层，负责技能卡数据的业务规则与状态管理。
+/// 职责：
+///   - 管理内存中的技能卡列表状态
+///   - 提供添加、删除、经验增加等业务操作
+///   - 处理经验溢出时的自动升级逻辑
+///   - 每次数据变更后通过 WisdomRepository 持久化（协调保存整个 Wisdom 聚合）
+/// 不负责：底层存储实现、DTO 格式管理、UI 展示、技能点/任务管理。
+/// 上游依赖方：UI 层（WisdomWidget）、SkillPointService（经验上传时调用）。
+/// 下游依赖方：WisdomRepository（仓储接口）。
+///
+/// 依赖注入：通过 [initialize] 注入 WisdomRepository，替代原来直接操作 SharedPreferences。
+/// 协调保存：因为 Wisdom 数据（技能卡+技能点+任务）存储在同一个聚合中，
+///   保存时需要获取完整快照。通过 [onSaveRequested] 回调收集所有子服务数据。
 class SkillService extends ChangeNotifier {
-  static const String _storageKey = 'wisdom_skills';
-
   /// 单例实例
-  static final SkillService _instance = SkillService._internal();
-  factory SkillService() => _instance;
-  SkillService._internal();
+  static SkillService? _instance;
+
+  /// 获取单例
+  factory SkillService() {
+    if (_instance == null) {
+      throw StateError('SkillService 未初始化，请先调用 SkillService.initialize()');
+    }
+    return _instance!;
+  }
+
+  /// 初始化单例并注入依赖
+  static void initialize(WisdomRepository repository) {
+    _instance ??= SkillService._internal(repository);
+  }
+
+  /// 重置单例（仅用于测试）
+  @visibleForTesting
+  static void reset() {
+    _instance = null;
+  }
 
   /// 技能列表（内部状态）
   List<SkillData> _skills = [];
 
-  /// 是否已初始化
-  bool _initialized = false;
+  /// 协调保存回调：由 Bootstrap 注入，用于收集完整 Wisdom 快照后保存
+  ///
+  /// 伪代码思路：
+  ///   当技能卡数据变更时，调用此回调 -> 回调内部收集所有子服务数据
+  ///   -> 组装完整 WisdomDto -> 通过 repository 保存
+  Future<void> Function()? onSaveRequested;
+
+  // ignore: avoid_unused_constructor_parameters
+  SkillService._internal(WisdomRepository _);
 
   /// 获取技能列表（只读）
   List<SkillData> get skills => List.unmodifiable(_skills);
 
-  /// 初始化：从持久化存储加载数据
-  Future<void> init() async {
-    if (_initialized) return;
-    await _loadFromStorage();
-    _initialized = true;
+  /// 从 DTO 加载数据（由 Bootstrap 调用）
+  ///
+  /// 伪代码思路：
+  ///   接收 WisdomDto 中的 skills 列表 -> 转换为领域模型列表 -> 存入内存
+  void loadFromDto(List<SkillDto> skillDtos) {
+    _skills = skillDtos.map(_dtoToDomain).toList();
+  }
+
+  /// 导出当前数据为 DTO 列表（用于协调保存）
+  List<SkillDto> toDto() {
+    return _skills.map(_domainToDto).toList();
   }
 
   /// 添加技能
@@ -44,14 +84,14 @@ class SkillService extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     _skills.add(skill);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
   /// 删除技能
   Future<void> removeSkill(String id) async {
     _skills.removeWhere((s) => s.id == id);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
@@ -76,7 +116,7 @@ class SkillService extends ChangeNotifier {
       level: newLevel,
     );
 
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
@@ -89,28 +129,36 @@ class SkillService extends ChangeNotifier {
     }
   }
 
-  /// 从持久化存储加载
-  Future<void> _loadFromStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
-      if (jsonStr == null) return;
-
-      final List<dynamic> jsonList = json.decode(jsonStr);
-      _skills = jsonList.map((j) => SkillData.fromJson(j)).toList();
-    } catch (e) {
-      debugPrint('SkillService: 加载数据失败 - $e');
+  /// 请求协调保存
+  Future<void> _requestSave() async {
+    if (onSaveRequested != null) {
+      await onSaveRequested!();
     }
   }
 
-  /// 保存到持久化存储
-  Future<void> _saveToStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = json.encode(_skills.map((s) => s.toJson()).toList());
-      await prefs.setString(_storageKey, jsonStr);
-    } catch (e) {
-      debugPrint('SkillService: 保存数据失败 - $e');
-    }
+  /// DTO -> Domain 转换
+  SkillData _dtoToDomain(SkillDto dto) {
+    return SkillData(
+      id: dto.id,
+      name: dto.name,
+      level: dto.level,
+      currentXp: dto.currentXp,
+      maxXp: dto.maxXp,
+      iconCodePoint: dto.iconCodePoint,
+      createdAt: DateTime.parse(dto.createdAt),
+    );
+  }
+
+  /// Domain -> DTO 转换
+  SkillDto _domainToDto(SkillData domain) {
+    return SkillDto(
+      id: domain.id,
+      name: domain.name,
+      level: domain.level,
+      currentXp: domain.currentXp,
+      maxXp: domain.maxXp,
+      iconCodePoint: domain.iconCodePoint,
+      createdAt: domain.createdAt.toIso8601String(),
+    );
   }
 }

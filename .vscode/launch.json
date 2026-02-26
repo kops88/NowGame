@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NowGame (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--web-port",
+        "8080"
+      ]
+    },
+    {
+      "name": "NowGame (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "-d",
+        "windows"
+      ]
+    }
+  ]
+}

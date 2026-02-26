@@ -2,11 +2,13 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:nowgame/Util/DebugWidget.dart';
+import 'package:nowgame/Model/DayHealthData.dart';
+import 'package:nowgame/Service/HealthService.dart';
 import 'package:nowgame/MainWidget/ChartDetailDialog.dart';
 
 // 扣分项标记点颜色（与 ChartDetailDialog 一致）
 const Color _visionColor = Color(0xFF4A148C); // 深紫色
-const Color _neckColor = Color(0xFFE65100); // 深橘色
+const Color _neckColor = Color(0xFFE65100); // 深橙色
 const Color _waistColor = Color(0xFF1B5E20); // 深绿色
 
 class HealthCardWidget extends StatefulWidget {
@@ -19,7 +21,7 @@ class HealthCardWidget extends StatefulWidget {
 class _HealthCardWidgetState extends State<HealthCardWidget> {
   late List<FlSpot> _dataPoints;
   final GlobalKey _chartKey = GlobalKey(); // 用于获取折线图位置
-  final HealthDataManager _healthManager = HealthDataManager();
+  final HealthService _healthService = HealthService();
   DayHealthData? _todayData;
 
   @override
@@ -36,10 +38,9 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
     });
   }
 
-  Future<void> _loadTodayData() async {
-    await _healthManager.init();
+  void _loadTodayData() {
     setState(() {
-      _todayData = _healthManager.getDataForDate(DateTime.now());
+      _todayData = _healthService.getDataForDate(DateTime.now());
     });
   }
 
@@ -51,7 +52,7 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
     }
 
     // 获取有效的基准分数（优先使用昨天的最终分数，默认100）
-    final effectiveBase = _todayData!.baseScore ?? _healthManager.getYesterdayFinalScore() ?? 100;
+    final effectiveBase = _todayData!.baseScore ?? _healthService.getYesterdayFinalScore() ?? 100;
 
     final todayX = _dataPoints.last.x;
     final baseY = effectiveBase.toDouble();

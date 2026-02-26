@@ -1,22 +1,46 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nowgame/Dto/WisdomDto.dart';
 import 'package:nowgame/Model/TaskData.dart';
 import 'package:nowgame/Service/SkillPointService.dart';
 
 /// 任务数据服务
-/// 负责任务数据的增删改查与持久化
-/// 任务完成时自动更新关联技能点的经验值
+///
+/// 定位：Wisdom 领域的任务业务层，负责任务数据的业务规则与状态管理。
+/// 职责：
+///   - 管理内存中的任务列表状态
+///   - 提供添加、删除、进度增减等业务操作
+///   - 处理任务完成时向关联技能点传递经验的联动逻辑
+///   - 每次数据变更后通过协调保存回调持久化
+/// 不负责：底层存储实现、DTO 格式管理、UI 展示、技能卡/技能点管理。
+/// 上游依赖方：UI 层（TaskCard）。
+/// 下游依赖方：SkillPointService（经验传递）。
+///
+/// 协调保存：与 SkillService、SkillPointService 共享同一个 Wisdom 聚合存储。
 class TaskService extends ChangeNotifier {
-  static const String _storageKey = 'wisdom_tasks';
-
   /// 每次完成任务给技能增加的经验值
   static const int xpPerCompletion = 5;
 
   /// 单例实例
-  static final TaskService _instance = TaskService._internal();
-  factory TaskService() => _instance;
-  TaskService._internal();
+  static TaskService? _instance;
+
+  /// 获取单例
+  factory TaskService() {
+    if (_instance == null) {
+      throw StateError('TaskService 未初始化，请先调用 TaskService.initialize()');
+    }
+    return _instance!;
+  }
+
+  /// 初始化单例
+  static void initialize() {
+    _instance ??= TaskService._internal();
+  }
+
+  /// 重置单例（仅用于测试）
+  @visibleForTesting
+  static void reset() {
+    _instance = null;
+  }
 
   /// 技能点服务引用（用于更新经验值）
   final SkillPointService _skillPointService = SkillPointService();
@@ -24,17 +48,22 @@ class TaskService extends ChangeNotifier {
   /// 任务列表（内部状态）
   List<TaskData> _tasks = [];
 
-  /// 是否已初始化
-  bool _initialized = false;
+  /// 协调保存回调
+  Future<void> Function()? onSaveRequested;
+
+  TaskService._internal();
 
   /// 获取任务列表（只读）
   List<TaskData> get tasks => List.unmodifiable(_tasks);
 
-  /// 初始化：从持久化存储加载数据
-  Future<void> init() async {
-    if (_initialized) return;
-    await _loadFromStorage();
-    _initialized = true;
+  /// 从 DTO 加载数据（由 Bootstrap 调用）
+  void loadFromDto(List<TaskDto> taskDtos) {
+    _tasks = taskDtos.map(_dtoToDomain).toList();
+  }
+
+  /// 导出当前数据为 DTO 列表（用于协调保存）
+  List<TaskDto> toDto() {
+    return _tasks.map(_domainToDto).toList();
   }
 
   /// 添加任务
@@ -56,19 +85,19 @@ class TaskService extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     _tasks.add(task);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
   /// 删除任务
   Future<void> removeTask(String id) async {
     _tasks.removeWhere((t) => t.id == id);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
   /// 增加任务完成次数
-  /// 同时更新关联技能的经验值
+  /// 只在任务进度满（刚好完成）时一次性给关联技能点增加经验
   Future<void> incrementCount(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
@@ -76,12 +105,28 @@ class TaskService extends ChangeNotifier {
     final task = _tasks[index];
     if (task.isCompleted) return;
 
-    _tasks[index] = task.copyWith(currentCount: task.currentCount + 1);
-    await _saveToStorage();
+    final updatedTask = task.copyWith(currentCount: task.currentCount + 1);
+    _tasks[index] = updatedTask;
+    await _requestSave();
 
-    // 更新关联技能点经验值
-    await _skillPointService.addExperience(task.skillId, xpPerCompletion);
+    // 仅在任务刚好完成时一次性增加经验
+    if (updatedTask.isCompleted) {
+      await _skillPointService.addExperience(task.skillId, xpPerCompletion);
+    }
 
+    notifyListeners();
+  }
+
+  /// 减少任务完成次数（不低于 0）
+  Future<void> decrementCount(String taskId) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+
+    final task = _tasks[index];
+    if (task.currentCount <= 0) return;
+
+    _tasks[index] = task.copyWith(currentCount: task.currentCount - 1);
+    await _requestSave();
     notifyListeners();
   }
 
@@ -90,28 +135,38 @@ class TaskService extends ChangeNotifier {
     return _tasks.where((t) => t.skillId == skillPointId).toList();
   }
 
-  /// 从持久化存储加载
-  Future<void> _loadFromStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
-      if (jsonStr == null) return;
-
-      final List<dynamic> jsonList = json.decode(jsonStr);
-      _tasks = jsonList.map((j) => TaskData.fromJson(j)).toList();
-    } catch (e) {
-      debugPrint('TaskService: 加载数据失败 - $e');
+  /// 请求协调保存
+  Future<void> _requestSave() async {
+    if (onSaveRequested != null) {
+      await onSaveRequested!();
     }
   }
 
-  /// 保存到持久化存储
-  Future<void> _saveToStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = json.encode(_tasks.map((t) => t.toJson()).toList());
-      await prefs.setString(_storageKey, jsonStr);
-    } catch (e) {
-      debugPrint('TaskService: 保存数据失败 - $e');
-    }
+  /// DTO -> Domain 转换
+  TaskData _dtoToDomain(TaskDto dto) {
+    return TaskData(
+      id: dto.id,
+      name: dto.name,
+      skillId: dto.skillId,
+      skillName: dto.skillName,
+      maxCount: dto.maxCount,
+      currentCount: dto.currentCount,
+      iconCodePoint: dto.iconCodePoint,
+      createdAt: DateTime.parse(dto.createdAt),
+    );
+  }
+
+  /// Domain -> DTO 转换
+  TaskDto _domainToDto(TaskData domain) {
+    return TaskDto(
+      id: domain.id,
+      name: domain.name,
+      skillId: domain.skillId,
+      skillName: domain.skillName,
+      maxCount: domain.maxCount,
+      currentCount: domain.currentCount,
+      iconCodePoint: domain.iconCodePoint,
+      createdAt: domain.createdAt.toIso8601String(),
+    );
   }
 }

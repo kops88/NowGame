@@ -32,6 +32,10 @@ class SkillCardStyle {
   /// 主题色（用于等级文字、经验条等）
   final Color accentColor;
 
+  /// 是否显示等级标签
+  /// 二级弹窗中的技能点卡片不需要显示等级，只保留经验条
+  final bool showLevel;
+
   const SkillCardStyle({
     this.borderRadius = 12.0,
     this.backgroundOpacity = 0.1,
@@ -42,6 +46,7 @@ class SkillCardStyle {
     this.progressBarHeight = 8.0,
     this.progressBarRadius = 4.0,
     this.accentColor = Colors.orangeAccent,
+    this.showLevel = true,
   });
 }
 
@@ -76,7 +81,7 @@ class SkillDetailCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 头部：图标、标题、等级
+            // 头部：图标、标题、等级（可选）
             Row(
               children: [
                 Icon(skillPoint.icon, color: Colors.white70, size: style.iconSize),
@@ -91,21 +96,22 @@ class SkillDetailCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: style.accentColor.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: MText(
-                    'Lv. ${skillPoint.level}',
-                    style: TextStyle(
-                      fontSize: style.levelFontSize,
-                      fontWeight: FontWeight.bold,
-                      color: style.accentColor,
+                if (style.showLevel)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: style.accentColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: MText(
+                      'Lv. ${skillPoint.level}',
+                      style: TextStyle(
+                        fontSize: style.levelFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: style.accentColor,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
             

@@ -31,79 +31,105 @@ class TaskCardStyle {
 
 /// 单个任务卡片组件
 /// 方形四角、icon + 名称 + 绿色进度条
-/// 点击增加完成次数
+/// 点击左半区域减少进度，点击右半区域增加进度
 class TaskCard extends StatelessWidget {
   final TaskData task;
   final TaskCardStyle style;
-  final VoidCallback? onTap;
+  final VoidCallback? onIncrement;
+  final VoidCallback? onDecrement;
   final VoidCallback? onLongPress;
 
   const TaskCard({
     super.key,
     required this.task,
     this.style = const TaskCardStyle(),
-    this.onTap,
+    this.onIncrement,
+    this.onDecrement,
     this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
       onLongPress: onLongPress,
-      child: Container(
-        padding: style.padding,
-        decoration: BoxDecoration(
-          color: style.backgroundColor,
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 上部：icon + 名称 + 进度文字
-            Row(
+      child: Stack(
+        children: [
+          // 卡片内容
+          Container(
+            padding: style.padding,
+            decoration: BoxDecoration(
+              color: style.backgroundColor,
+              borderRadius: BorderRadius.circular(style.borderRadius),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  IconData(task.iconCodePoint, fontFamily: 'MaterialIcons'),
-                  color: style.progressColor,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: MText(
-                    task.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
+                // 上部：icon + 名称 + 进度文字
+                Row(
+                  children: [
+                    Icon(
+                      IconData(task.iconCodePoint, fontFamily: 'MaterialIcons'),
+                      color: style.progressColor,
+                      size: 20,
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: MText(
+                        task.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    MText(
+                      '${task.currentCount} / ${task.maxCount}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
                 ),
-                MText(
-                  '${task.currentCount} / ${task.maxCount}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.6),
+                const SizedBox(height: 8),
+                // 进度条
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: task.progress,
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    color: task.isCompleted
+                        ? style.progressColor.withValues(alpha: 0.5)
+                        : style.progressColor,
+                    minHeight: style.progressBarHeight,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // 进度条
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: task.progress,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                color: task.isCompleted
-                    ? style.progressColor.withValues(alpha: 0.5)
-                    : style.progressColor,
-                minHeight: style.progressBarHeight,
+          ),
+          // 左右两个透明点击区域，任务完成后禁用
+          if (!task.isCompleted)
+            Positioned.fill(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onDecrement,
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onIncrement,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -135,18 +161,23 @@ class _TaskCardListState extends State<TaskCardList> {
     super.dispose();
   }
 
-  Future<void> _initService() async {
-    await _taskService.init();
-    if (mounted) setState(() => _initialized = true);
+  /// Bootstrap 已完成数据加载，直接标记为已初始化
+  void _initService() {
+    _initialized = true;
   }
 
   void _onDataChanged() {
     if (mounted) setState(() {});
   }
 
-  Future<void> _onTaskTap(TaskData task) async {
+  Future<void> _onTaskIncrement(TaskData task) async {
     if (task.isCompleted) return;
     await _taskService.incrementCount(task.id);
+  }
+
+  Future<void> _onTaskDecrement(TaskData task) async {
+    if (task.currentCount <= 0) return;
+    await _taskService.decrementCount(task.id);
   }
 
   Future<void> _onTaskLongPress(TaskData task) async {
@@ -181,7 +212,13 @@ class _TaskCardListState extends State<TaskCardList> {
   Widget build(BuildContext context) {
     if (!_initialized) return const SizedBox.shrink();
 
-    final tasks = _taskService.tasks;
+    final tasks = _taskService.tasks.toList()
+      ..sort((a, b) {
+        // 未完成的在已完成的上面
+        if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+        // 同组内按创建时间升序（先添加的在上面）
+        return a.createdAt.compareTo(b.createdAt);
+      });
     if (tasks.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -203,7 +240,8 @@ class _TaskCardListState extends State<TaskCardList> {
             final task = tasks[index];
             return TaskCard(
               task: task,
-              onTap: () => _onTaskTap(task),
+              onIncrement: () => _onTaskIncrement(task),
+              onDecrement: () => _onTaskDecrement(task),
               onLongPress: () => _onTaskLongPress(task),
             );
           },

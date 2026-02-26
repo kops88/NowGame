@@ -1,15 +1,20 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:nowgame/Bootstrap.dart';
 import 'package:nowgame/MainWidget/HealthWidget.dart';
 import 'package:nowgame/MainWidget/MainQuestWidget.dart';
 import 'package:nowgame/MainWidget/MoneyAndInfluence.dart';
-import 'dart:math';
 import 'package:nowgame/MainWidget/TimeRingWidget.dart';
 import 'package:nowgame/MainWidget/WisdomWidget.dart';
 import 'package:nowgame/MainWidget/TaskCard.dart';
 import 'package:nowgame/Util/DebugWidget.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 应用启动前完成所有初始化：存储驱动、数据迁移、Service 注入
+  final bootstrap = AppBootstrap();
+  await bootstrap.initialize();
+
   runApp(const MyApp());
 }
 
@@ -75,4 +80,3 @@ class DashboardScreen extends StatelessWidget {
       );
   }
 }
-

@@ -9,7 +9,10 @@ import 'package:nowgame/Model/SkillData.dart';
 import 'package:nowgame/Service/SkillService.dart';
 
 /// Wisdom/Skills 主卡片组件
-/// 负责展示技能总览、右侧"+"按钮、点击触发弹窗
+/// 负责：展示技能卡总览列表、右上角"+"按钮触发添加技能卡、点击技能卡项触发技能点弹窗
+/// 不负责：弹窗动画实现（委托给 ExpandablePopup）、数据持久化（委托给 SkillService）
+/// 依赖上游：SkillService（数据读取与监听）
+/// 依赖下游：WisdomDetailDialog（技能点弹窗）、SkillConfigDialog（添加技能卡弹窗）
 class WisdomSkillsWidget extends StatefulWidget {
   const WisdomSkillsWidget({Key? key}) : super(key: key);
 
@@ -19,6 +22,10 @@ class WisdomSkillsWidget extends StatefulWidget {
 
 class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
   final SkillService _skillService = SkillService();
+
+  /// "+"按钮的 GlobalKey，用于获取动画起点位置
+  final GlobalKey _addButtonKey = GlobalKey();
+
   bool _initialized = false;
 
   @override
@@ -34,18 +41,25 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
     super.dispose();
   }
 
-  Future<void> _initServices() async {
-    await _skillService.init();
-    if (mounted) setState(() => _initialized = true);
+  /// Bootstrap 已完成数据加载，直接标记为已初始化
+  void _initServices() {
+    _initialized = true;
   }
 
   void _onDataChanged() {
     if (mounted) setState(() {});
   }
 
-  /// 点击"+"按钮：弹出添加技能卡弹窗
+  /// 点击"+"按钮：通过统一动画弹出添加技能卡配置窗口
+  /// 伪代码思路：
+  ///   1. 从 _addButtonKey 获取按钮在屏幕上的 Rect（作为动画起点）
+  ///   2. 调用 SkillConfigDialog.show 弹出统一动画的配置弹窗
+  ///   3. 若用户确认，调用 SkillService.addSkill 持久化
   Future<void> _showAddSkillDialog() async {
-    final result = await SkillConfigDialog.show(context);
+    final sourceRect = getWidgetRect(_addButtonKey);
+    if (sourceRect == null) return;
+
+    final result = await SkillConfigDialog.show(context, sourceRect: sourceRect);
     if (result == null) return;
 
     await _skillService.addSkill(
@@ -74,8 +88,9 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
                 'Wisdom / Skills',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              // "+"按钮：使用 Material + InkWell 确保事件隔离
+              // "+"按钮：使用 Material + InkWell 确保事件隔离，不被外层手势吞噬
               Material(
+                key: _addButtonKey,
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(16),
@@ -118,7 +133,9 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
 }
 
 /// 技能列表项组件（主卡片内的简略展示）
-/// 每个技能卡有独立的 GlobalKey，点击时弹出该技能卡的技能点弹窗
+/// 负责：展示单个技能卡的简略信息（图标、名称、等级）、点击触发技能点弹窗
+/// 不负责：数据管理、弹窗内容渲染
+/// 每个技能卡项有独立的 GlobalKey，点击时获取位置作为弹窗动画起点
 class _SkillListItem extends StatelessWidget {
   final SkillData skill;
 
@@ -127,6 +144,8 @@ class _SkillListItem extends StatelessWidget {
 
   _SkillListItem({required this.skill});
 
+  /// 点击技能卡项：弹出该技能卡下的技能点列表
+  /// 伪代码思路：从 _itemKey 获取位置 -> 调用 WisdomDetailDialog.show
   void _showSkillPointsDialog(BuildContext context) {
     final sourceRect = getWidgetRect(_itemKey);
     if (sourceRect == null) return;

@@ -1,33 +1,64 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nowgame/Dto/WisdomDto.dart';
 import 'package:nowgame/Model/SkillPointData.dart';
+import 'package:nowgame/Service/SkillService.dart';
 
 /// 技能点数据服务
-/// 负责技能点数据的增删改查与持久化
-/// 使用 ChangeNotifier 支持响应式 UI 更新
+///
+/// 定位：Wisdom 领域的技能点业务层，负责技能点数据的业务规则与状态管理。
+/// 职责：
+///   - 管理内存中的技能点列表状态
+///   - 提供添加、删除、经验增加等业务操作
+///   - 处理经验满时向父级技能卡传递经验的联动逻辑
+///   - 每次数据变更后通过协调保存回调持久化
+/// 不负责：底层存储实现、DTO 格式管理、UI 展示、任务管理。
+/// 上游依赖方：UI 层（WisdomDetailDialog）、TaskService（任务完成时调用）。
+/// 下游依赖方：SkillService（经验上传）。
+///
+/// 协调保存：与 SkillService 共享同一个 Wisdom 聚合存储，
+///   通过 [onSaveRequested] 回调触发整体保存。
 class SkillPointService extends ChangeNotifier {
-  static const String _storageKey = 'wisdom_skill_points';
-
   /// 单例实例
-  static final SkillPointService _instance = SkillPointService._internal();
-  factory SkillPointService() => _instance;
-  SkillPointService._internal();
+  static SkillPointService? _instance;
+
+  /// 获取单例
+  factory SkillPointService() {
+    if (_instance == null) {
+      throw StateError('SkillPointService 未初始化，请先调用 SkillPointService.initialize()');
+    }
+    return _instance!;
+  }
+
+  /// 初始化单例
+  static void initialize() {
+    _instance ??= SkillPointService._internal();
+  }
+
+  /// 重置单例（仅用于测试）
+  @visibleForTesting
+  static void reset() {
+    _instance = null;
+  }
 
   /// 技能点列表（内部状态）
   List<SkillPointData> _points = [];
 
-  /// 是否已初始化
-  bool _initialized = false;
+  /// 协调保存回调
+  Future<void> Function()? onSaveRequested;
+
+  SkillPointService._internal();
 
   /// 获取所有技能点列表（只读）
   List<SkillPointData> get points => List.unmodifiable(_points);
 
-  /// 初始化：从持久化存储加载数据
-  Future<void> init() async {
-    if (_initialized) return;
-    await _loadFromStorage();
-    _initialized = true;
+  /// 从 DTO 加载数据（由 Bootstrap 调用）
+  void loadFromDto(List<SkillPointDto> pointDtos) {
+    _points = pointDtos.map(_dtoToDomain).toList();
+  }
+
+  /// 导出当前数据为 DTO 列表（用于协调保存）
+  List<SkillPointDto> toDto() {
+    return _points.map(_domainToDto).toList();
   }
 
   /// 获取某技能卡下属的技能点列表
@@ -51,39 +82,36 @@ class SkillPointService extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     _points.add(point);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
   /// 删除技能点
   Future<void> removePoint(String id) async {
     _points.removeWhere((p) => p.id == id);
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
   /// 增加经验值（任务完成时调用）
-  /// 经验满时自动升级并重置经验
+  /// 经验满时不升级技能点自身，而是重置经验值并给所属技能卡增加经验（触发技能卡升级）
   Future<void> addExperience(String pointId, int xp) async {
     final index = _points.indexWhere((p) => p.id == pointId);
     if (index == -1) return;
 
     var point = _points[index];
     var newXp = point.currentXp + xp;
-    var newLevel = point.level;
 
-    // 经验溢出时升级
+    // 经验溢出时：重置经验并给父级技能卡增加经验
     while (newXp >= point.maxXp) {
       newXp -= point.maxXp;
-      newLevel++;
+      // 技能点经验满 -> 给所属技能卡增加经验，由 SkillService 处理技能卡升级
+      await SkillService().addExperience(point.skillId, point.maxXp);
     }
 
-    _points[index] = point.copyWith(
-      currentXp: newXp,
-      level: newLevel,
-    );
+    _points[index] = point.copyWith(currentXp: newXp);
 
-    await _saveToStorage();
+    await _requestSave();
     notifyListeners();
   }
 
@@ -96,28 +124,38 @@ class SkillPointService extends ChangeNotifier {
     }
   }
 
-  /// 从持久化存储加载
-  Future<void> _loadFromStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
-      if (jsonStr == null) return;
-
-      final List<dynamic> jsonList = json.decode(jsonStr);
-      _points = jsonList.map((j) => SkillPointData.fromJson(j)).toList();
-    } catch (e) {
-      debugPrint('SkillPointService: 加载数据失败 - $e');
+  /// 请求协调保存
+  Future<void> _requestSave() async {
+    if (onSaveRequested != null) {
+      await onSaveRequested!();
     }
   }
 
-  /// 保存到持久化存储
-  Future<void> _saveToStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = json.encode(_points.map((p) => p.toJson()).toList());
-      await prefs.setString(_storageKey, jsonStr);
-    } catch (e) {
-      debugPrint('SkillPointService: 保存数据失败 - $e');
-    }
+  /// DTO -> Domain 转换
+  SkillPointData _dtoToDomain(SkillPointDto dto) {
+    return SkillPointData(
+      id: dto.id,
+      name: dto.name,
+      skillId: dto.skillId,
+      level: dto.level,
+      currentXp: dto.currentXp,
+      maxXp: dto.maxXp,
+      iconCodePoint: dto.iconCodePoint,
+      createdAt: DateTime.parse(dto.createdAt),
+    );
+  }
+
+  /// Domain -> DTO 转换
+  SkillPointDto _domainToDto(SkillPointData domain) {
+    return SkillPointDto(
+      id: domain.id,
+      name: domain.name,
+      skillId: domain.skillId,
+      level: domain.level,
+      currentXp: domain.currentXp,
+      maxXp: domain.maxXp,
+      iconCodePoint: domain.iconCodePoint,
+      createdAt: domain.createdAt.toIso8601String(),
+    );
   }
 }
