@@ -3,9 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:nowgame/Dto/WisdomDto.dart';
 import 'package:nowgame/Repository/HealthRepository.dart';
 import 'package:nowgame/Repository/HealthRepositoryImpl.dart';
+import 'package:nowgame/Repository/ShopRepository.dart';
+import 'package:nowgame/Repository/ShopRepositoryImpl.dart';
 import 'package:nowgame/Repository/WisdomRepository.dart';
 import 'package:nowgame/Repository/WisdomRepositoryImpl.dart';
 import 'package:nowgame/Service/HealthService.dart';
+import 'package:nowgame/Service/ShopService.dart';
 import 'package:nowgame/Service/SkillPointService.dart';
 import 'package:nowgame/Service/SkillService.dart';
 import 'package:nowgame/Service/TaskService.dart';
@@ -33,7 +36,10 @@ class AppBootstrap {
   ///
   /// 每次数据结构变更时递增此值，并在 [_buildMigrationSteps] 中添加对应迁移步骤。
   /// v1: 初始版本 —— 从散落的 SharedPreferences key 迁移到统一聚合存储
-  static const int currentSchemaVersion = 1;
+  /// v2: 新增 MainQuest 模块（全新 key，无需旧数据迁移，仅标记版本号升级）
+  /// v3: 移除独立 MainQuest 模块，将其数据迁移到 Wisdom/Skill 体系；SkillDto 新增 deadline 字段
+  /// v4: 新增 Shop 模块（商品 + 奖池，全新 key，无需旧数据迁移）
+  static const int currentSchemaVersion = 4;
 
   /// 存储驱动（全局共享）
   late final LocalStoreDriver _driver;
@@ -41,6 +47,7 @@ class AppBootstrap {
   /// 仓储实例
   late final WisdomRepository _wisdomRepository;
   late final HealthRepository _healthRepository;
+  late final ShopRepository _shopRepository;
 
   /// 执行完整的应用初始化流程
   ///
@@ -72,12 +79,14 @@ class AppBootstrap {
     // 3. 创建 Repository 实例
     _wisdomRepository = WisdomRepositoryImpl(_driver);
     _healthRepository = HealthRepositoryImpl(_driver);
+    _shopRepository = ShopRepositoryImpl(_driver);
 
     // 4. 初始化 Service 单例
     SkillService.initialize(_wisdomRepository);
     SkillPointService.initialize();
     TaskService.initialize();
     HealthService.initialize(_healthRepository);
+    ShopService.initialize(_shopRepository);
 
     // 5. 加载 Wisdom 数据
     final wisdomDto = await _wisdomRepository.load();
@@ -103,7 +112,14 @@ class AppBootstrap {
     SkillPointService().onSaveRequested = saveWisdom;
     TaskService().onSaveRequested = saveWisdom;
 
-    // 7. 初始化 Health 数据
+    // 7. 加载 Shop 数据
+    final shopDto = await _shopRepository.load();
+    ShopService().loadFromDto(shopDto);
+    debugPrint('🚀 [Bootstrap] Shop 数据加载完成: '
+        '${shopDto.items.length} items, '
+        '${shopDto.poolItems.length} pool items');
+
+    // 8. 初始化 Health 数据
     await HealthService().init();
     debugPrint('🚀 [Bootstrap] Health 数据加载完成');
 
@@ -115,12 +131,27 @@ class AppBootstrap {
   /// 伪代码思路：
   ///   返回按版本升序排列的 MigrationStep 列表。
   ///   v1: 从旧的散落 key 迁移到统一聚合 key。
+  ///   v2: 新增 MainQuest 模块（全新模块无旧数据，此步骤仅标记版本号升级）。
+  ///   v3: 移除独立 MainQuest 模块，将其数据迁移到 Wisdom/Skill 体系。
+  ///   v4: 新增 Shop 模块（全新模块无旧数据，仅标记版本号升级）。
   ///   后续版本只需在此追加新的 MigrationStep。
   List<MigrationStep> _buildMigrationSteps() {
     return [
       MigrationStep(
         toVersion: 1,
         migrate: _migrateToV1,
+      ),
+      MigrationStep(
+        toVersion: 2,
+        migrate: _migrateToV2,
+      ),
+      MigrationStep(
+        toVersion: 3,
+        migrate: _migrateToV3,
+      ),
+      MigrationStep(
+        toVersion: 4,
+        migrate: _migrateToV4,
       ),
     ];
   }
@@ -159,5 +190,90 @@ class AppBootstrap {
     }
 
     debugPrint('🔧 [Migration v1] 迁移完成');
+  }
+
+  /// v2 迁移：引入 MainQuest 模块
+  ///
+  /// 伪代码思路：
+  ///   MainQuest 是全新模块，无旧数据需要迁移。
+  ///   此步骤仅作为版本标记，确保迁移链连续性。
+  ///   如果未来有其他 v2 变更（如字段重命名），在此处添加逻辑。
+  static Future<void> _migrateToV2(LocalStoreDriver driver) async {
+    debugPrint('🔧 [Migration v2] 新增 MainQuest 模块，无旧数据需迁移');
+  }
+
+  /// v3 迁移：移除独立 MainQuest 模块，将其数据合并到 Wisdom/Skill 体系
+  ///
+  /// 伪代码思路：
+  ///   1. 读取 'main_quest_data' key 中的 MainQuest 数据
+  ///   2. 如果无数据 -> 跳过（用户未使用过 MainQuest 功能）
+  ///   3. 读取现有 'wisdom_data' key 中的 Wisdom 数据
+  ///   4. 将每条 MainQuest 转换为 SkillDto 格式追加到 skills 数组
+  ///      （deadline 直接映射，maxCount 映射为 maxXp，currentCount 映射为 currentXp）
+  ///   5. 写回 'wisdom_data'
+  ///   6. 不删除 'main_quest_data' key（保留可恢复信息）
+  static Future<void> _migrateToV3(LocalStoreDriver driver) async {
+    debugPrint('🔧 [Migration v3] 合并 MainQuest 数据到 Wisdom/Skill 体系...');
+
+    final mqJsonStr = await driver.getString('main_quest_data');
+    if (mqJsonStr == null) {
+      debugPrint('🔧 [Migration v3] 无 MainQuest 旧数据，跳过');
+      return;
+    }
+
+    try {
+      final mqMap = json.decode(mqJsonStr) as Map<String, dynamic>;
+      final mqQuests = mqMap['quests'] as List<dynamic>? ?? [];
+
+      if (mqQuests.isEmpty) {
+        debugPrint('🔧 [Migration v3] MainQuest 列表为空，跳过');
+        return;
+      }
+
+      // 读取现有 Wisdom 数据
+      final wisdomJsonStr = await driver.getString(WisdomRepositoryImpl.storageKey);
+      Map<String, dynamic> wisdomMap;
+      if (wisdomJsonStr != null) {
+        wisdomMap = json.decode(wisdomJsonStr) as Map<String, dynamic>;
+      } else {
+        wisdomMap = {'skills': [], 'skillPoints': [], 'tasks': []};
+      }
+
+      final existingSkills = (wisdomMap['skills'] as List<dynamic>?) ?? [];
+
+      // 将 MainQuest 转换为 SkillDto 格式并追加
+      for (final mq in mqQuests) {
+        final mqData = mq as Map<String, dynamic>;
+        final convertedSkill = {
+          'id': mqData['id'],
+          'name': mqData['name'],
+          'level': 1,
+          'currentXp': mqData['currentCount'] ?? 0,
+          'maxXp': mqData['maxCount'] ?? 100,
+          'iconCodePoint': mqData['iconCodePoint'] ?? 0xe894,
+          'deadline': mqData['deadline'],
+          'createdAt': mqData['createdAt'],
+        };
+        existingSkills.add(convertedSkill);
+      }
+
+      wisdomMap['skills'] = existingSkills;
+      await driver.setString(WisdomRepositoryImpl.storageKey, json.encode(wisdomMap));
+
+      debugPrint('🔧 [Migration v3] 已将 ${mqQuests.length} 条 MainQuest 合并到 Wisdom');
+    } catch (e) {
+      debugPrint('❌ [Migration v3] 合并失败: $e');
+      // 不抛出异常，避免因旧数据格式问题阻塞启动
+    }
+  }
+
+  /// v4 迁移：引入 Shop 模块（商品 + 奖池）
+  ///
+  /// 伪代码思路：
+  ///   Shop 是全新模块，无旧数据需要迁移。
+  ///   此步骤仅作为版本标记，确保迁移链连续性。
+  ///   如果未来有其他 v4 变更，在此处添加逻辑。
+  static Future<void> _migrateToV4(LocalStoreDriver driver) async {
+    debugPrint('🔧 [Migration v4] 新增 Shop 模块，无旧数据需迁移');
   }
 }

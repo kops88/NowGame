@@ -62,6 +62,7 @@ class WisdomDto {
 /// 定位：SkillData 的持久化传输对象。
 /// 在哪一层使用：Repository 实现层。
 /// 与版本迁移的关系：字段变更通过 MigrationStep 处理。
+/// v3 新增 deadline 字段（可空），旧数据无此字段时默认 null（表示永久任务）。
 class SkillDto {
   final String id;
   final String name;
@@ -69,6 +70,10 @@ class SkillDto {
   final int currentXp;
   final int maxXp;
   final int iconCodePoint;
+
+  /// 截止日期（ISO8601 字符串，可空，null 表示永久任务）
+  final String? deadline;
+
   final String createdAt;
 
   const SkillDto({
@@ -78,6 +83,7 @@ class SkillDto {
     this.currentXp = 0,
     this.maxXp = 100,
     this.iconCodePoint = 0xe894,
+    this.deadline,
     required this.createdAt,
   });
 
@@ -88,6 +94,7 @@ class SkillDto {
         currentXp: json['currentXp'] as int? ?? 0,
         maxXp: json['maxXp'] as int? ?? 100,
         iconCodePoint: json['iconCodePoint'] as int? ?? 0xe894,
+        deadline: json['deadline'] as String?,
         createdAt: json['createdAt'] as String,
       );
 
@@ -98,6 +105,7 @@ class SkillDto {
         'currentXp': currentXp,
         'maxXp': maxXp,
         'iconCodePoint': iconCodePoint,
+        'deadline': deadline,
         'createdAt': createdAt,
       };
 }

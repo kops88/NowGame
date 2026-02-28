@@ -16,8 +16,14 @@ class TaskData {
   /// 最大次数
   final int maxCount;
 
-  /// 当前完成次数
+  /// 当前完成次数（内存中的临时进度，可自由增减）
   final int currentCount;
+
+  /// 已存档的进度基线（上次持久化时的进度值）
+  ///
+  /// 保存时取 max(currentCount, savedCount)，保证存档进度只增不减。
+  /// 加载时等于 currentCount（从存储恢复的值即为已确认的基线）。
+  final int savedCount;
 
   /// 图标的 codePoint
   final int iconCodePoint;
@@ -32,6 +38,7 @@ class TaskData {
     required this.skillName,
     this.maxCount = 10,
     this.currentCount = 0,
+    this.savedCount = 0,
     this.iconCodePoint = 0xe876, // Icons.check_circle
     required this.createdAt,
   });
@@ -44,13 +51,15 @@ class TaskData {
 
   /// 从 JSON 反序列化
   factory TaskData.fromJson(Map<String, dynamic> json) {
+    final count = json['currentCount'] as int? ?? 0;
     return TaskData(
       id: json['id'] as String,
       name: json['name'] as String,
       skillId: json['skillId'] as String,
       skillName: json['skillName'] as String? ?? '',
       maxCount: json['maxCount'] as int? ?? 10,
-      currentCount: json['currentCount'] as int? ?? 0,
+      currentCount: count,
+      savedCount: count,
       iconCodePoint: json['iconCodePoint'] as int? ?? 0xe876,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
@@ -78,6 +87,7 @@ class TaskData {
     String? skillName,
     int? maxCount,
     int? currentCount,
+    int? savedCount,
     int? iconCodePoint,
     DateTime? createdAt,
   }) {
@@ -88,6 +98,7 @@ class TaskData {
       skillName: skillName ?? this.skillName,
       maxCount: maxCount ?? this.maxCount,
       currentCount: currentCount ?? this.currentCount,
+      savedCount: savedCount ?? this.savedCount,
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       createdAt: createdAt ?? this.createdAt,
     );

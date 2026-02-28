@@ -31,7 +31,7 @@ class SkillConfigDialog {
 }
 
 /// 技能卡配置表单内容
-/// 负责：渲染表单字段（名称、最大XP）、验证输入、返回结果
+/// 负责：渲染表单字段（名称、最大XP、截止日期）、验证输入、返回结果
 /// 不负责：动画、弹窗容器、数据持久化
 class _SkillConfigFormContent extends StatefulWidget {
   final double animationValue;
@@ -47,6 +47,9 @@ class _SkillConfigFormContentState extends State<_SkillConfigFormContent> {
   final _maxXpController = TextEditingController(text: '100');
   final _formKey = GlobalKey<FormState>();
 
+  /// 用户选择的截止日期（null 表示永久任务）
+  DateTime? _selectedDeadline;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -55,77 +58,147 @@ class _SkillConfigFormContentState extends State<_SkillConfigFormContent> {
   }
 
   /// 验证并返回表单数据
-  /// 伪代码思路：校验 formKey -> 组装 Map -> pop 返回
+  /// 伪代码思路：校验 formKey -> 组装 Map（含 deadline） -> pop 返回
   void _onConfirm() {
     if (!_formKey.currentState!.validate()) return;
 
     Navigator.of(context).pop({
       'name': _nameController.text.trim(),
       'maxXp': int.tryParse(_maxXpController.text.trim()) ?? 100,
+      'deadline': _selectedDeadline,
     });
+  }
+
+  /// 弹出日期选择器
+  /// 伪代码思路：showDatePicker -> 选中后更新 _selectedDeadline 并 setState
+  Future<void> _pickDeadline() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDeadline ?? DateTime.now().add(const Duration(days: 30)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+    );
+    if (date != null) {
+      setState(() => _selectedDeadline = date);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const MText(
-              'Add Skill',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 20),
-            ConfigFormField(
-              label: 'Skill Name',
-              controller: _nameController,
-              hintText: 'Enter skill name',
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Name is required';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            ConfigFormField(
-              label: 'Max XP',
-              controller: _maxXpController,
-              hintText: '100',
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                final num = int.tryParse(value ?? '');
-                if (num == null || num <= 0) {
-                  return 'Must be a positive number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _onConfirm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orangeAccent,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const MText(
+                'Add Skill',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 20),
+              ConfigFormField(
+                label: 'Skill Name',
+                controller: _nameController,
+                hintText: 'Enter skill name',
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Name is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              ConfigFormField(
+                label: 'Max XP',
+                controller: _maxXpController,
+                hintText: '100',
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  final num = int.tryParse(value ?? '');
+                  if (num == null || num <= 0) {
+                    return 'Must be a positive number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              // 截止日期选择区域
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Deadline (optional)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                   ),
-                  child: const Text('Confirm'),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: _pickDeadline,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedDeadline != null
+                                  ? '${_selectedDeadline!.year}-${_selectedDeadline!.month.toString().padLeft(2, '0')}-${_selectedDeadline!.day.toString().padLeft(2, '0')}'
+                                  : '永久任务（点击选择截止日期）',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _selectedDeadline != null
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          ),
+                          if (_selectedDeadline != null)
+                            GestureDetector(
+                              onTap: () => setState(() => _selectedDeadline = null),
+                              child: const Padding(
+                                padding: EdgeInsets.only(left: 8),
+                                child: Icon(Icons.close, size: 16, color: Colors.white54),
+                              ),
+                            )
+                          else
+                            const Icon(Icons.calendar_today, size: 16, color: Colors.white38),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _onConfirm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orangeAccent,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Confirm'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

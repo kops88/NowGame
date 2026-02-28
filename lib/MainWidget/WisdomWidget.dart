@@ -8,19 +8,19 @@ import 'package:nowgame/MainWidget/SkillConfigDialog.dart';
 import 'package:nowgame/Model/SkillData.dart';
 import 'package:nowgame/Service/SkillService.dart';
 
-/// Wisdom/Skills 主卡片组件
+/// MainQuest 主卡片组件（原 Wisdom/Skills）
 /// 负责：展示技能卡总览列表、右上角"+"按钮触发添加技能卡、点击技能卡项触发技能点弹窗
 /// 不负责：弹窗动画实现（委托给 ExpandablePopup）、数据持久化（委托给 SkillService）
 /// 依赖上游：SkillService（数据读取与监听）
 /// 依赖下游：WisdomDetailDialog（技能点弹窗）、SkillConfigDialog（添加技能卡弹窗）
-class WisdomSkillsWidget extends StatefulWidget {
-  const WisdomSkillsWidget({Key? key}) : super(key: key);
+class MainQuestSkillsWidget extends StatefulWidget {
+  const MainQuestSkillsWidget({Key? key}) : super(key: key);
 
   @override
-  State<WisdomSkillsWidget> createState() => _WisdomSkillsWidgetState();
+  State<MainQuestSkillsWidget> createState() => _MainQuestSkillsWidgetState();
 }
 
-class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
+class _MainQuestSkillsWidgetState extends State<MainQuestSkillsWidget> {
   final SkillService _skillService = SkillService();
 
   /// "+"按钮的 GlobalKey，用于获取动画起点位置
@@ -65,6 +65,7 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
     await _skillService.addSkill(
       name: result['name'] as String,
       maxXp: result['maxXp'] as int,
+      deadline: result['deadline'] as DateTime?,
     );
   }
 
@@ -85,7 +86,7 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const MText(
-                'Wisdom / Skills',
+                'Main Quests',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               // "+"按钮：使用 Material + InkWell 确保事件隔离，不被外层手势吞噬
@@ -133,7 +134,7 @@ class _WisdomSkillsWidgetState extends State<WisdomSkillsWidget> {
 }
 
 /// 技能列表项组件（主卡片内的简略展示）
-/// 负责：展示单个技能卡的简略信息（图标、名称、等级）、点击触发技能点弹窗
+/// 负责：展示单个技能卡的简略信息（图标、名称、时间标签、等级）、点击触发技能点弹窗
 /// 不负责：数据管理、弹窗内容渲染
 /// 每个技能卡项有独立的 GlobalKey，点击时获取位置作为弹窗动画起点
 class _SkillListItem extends StatelessWidget {
@@ -179,6 +180,23 @@ class _SkillListItem extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
+            // 时间标签（显示在等级左侧）
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: skill.deadlineColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: MText(
+                skill.remainingDaysText,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: skill.deadlineColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             MText(
               'Lv. ${skill.level}',
               style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),

@@ -539,7 +539,7 @@ class _ChartDetailDialogState extends State<ChartDetailDialog>
             titlesData: FlTitlesData(show: false),
             borderData: FlBorderData(show: false),
             minX: 0,
-            maxX: 9,
+            maxX: _currentDataPoints.isNotEmpty ? _currentDataPoints.last.x : 9,
             minY: 0,   // 修改为 0
             maxY: 100, // 固定为 100
             lineBarsData: [

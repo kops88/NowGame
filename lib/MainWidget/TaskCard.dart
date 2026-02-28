@@ -109,25 +109,24 @@ class TaskCard extends StatelessWidget {
               ],
             ),
           ),
-          // 左右两个透明点击区域，任务完成后禁用
-          if (!task.isCompleted)
-            Positioned.fill(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onDecrement,
-                    ),
+          // 左右两个透明点击区域（始终可用，进度满了也可以减少）
+          Positioned.fill(
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onDecrement,
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onIncrement,
-                    ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onIncrement,
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -170,14 +169,12 @@ class _TaskCardListState extends State<TaskCardList> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _onTaskIncrement(TaskData task) async {
-    if (task.isCompleted) return;
-    await _taskService.incrementCount(task.id);
+  void _onTaskIncrement(TaskData task) {
+    _taskService.incrementCount(task.id);
   }
 
-  Future<void> _onTaskDecrement(TaskData task) async {
-    if (task.currentCount <= 0) return;
-    await _taskService.decrementCount(task.id);
+  void _onTaskDecrement(TaskData task) {
+    _taskService.decrementCount(task.id);
   }
 
   Future<void> _onTaskLongPress(TaskData task) async {

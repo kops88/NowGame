@@ -75,12 +75,14 @@ class SkillService extends ChangeNotifier {
     required String name,
     int maxXp = 100,
     int iconCodePoint = 0xe894,
+    DateTime? deadline,
   }) async {
     final skill = SkillData(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       maxXp: maxXp,
       iconCodePoint: iconCodePoint,
+      deadline: deadline,
       createdAt: DateTime.now(),
     );
     _skills.add(skill);
@@ -145,6 +147,7 @@ class SkillService extends ChangeNotifier {
       currentXp: dto.currentXp,
       maxXp: dto.maxXp,
       iconCodePoint: dto.iconCodePoint,
+      deadline: dto.deadline != null ? DateTime.parse(dto.deadline!) : null,
       createdAt: DateTime.parse(dto.createdAt),
     );
   }
@@ -158,6 +161,7 @@ class SkillService extends ChangeNotifier {
       currentXp: domain.currentXp,
       maxXp: domain.maxXp,
       iconCodePoint: domain.iconCodePoint,
+      deadline: domain.deadline?.toIso8601String(),
       createdAt: domain.createdAt.toIso8601String(),
     );
   }

@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:nowgame/Util/DebugWidget.dart';
@@ -10,6 +9,9 @@ import 'package:nowgame/MainWidget/ChartDetailDialog.dart';
 const Color _visionColor = Color(0xFF4A148C); // 深紫色
 const Color _neckColor = Color(0xFFE65100); // 深橙色
 const Color _waistColor = Color(0xFF1B5E20); // 深绿色
+
+/// 折线图展示的天数
+const int _chartDays = 10;
 
 class HealthCardWidget extends StatefulWidget {
   const HealthCardWidget({Key? key}) : super(key: key);
@@ -27,20 +29,29 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
   @override
   void initState() {
     super.initState();
-    _generateData();
-    _loadTodayData();
+    _loadDataFromService();
   }
 
-  void _generateData() {
-    final random = Random();
-    _dataPoints = List.generate(10, (index) {
-      return FlSpot(index.toDouble(), 60 + random.nextDouble() * 38);
-    });
-  }
+  /// 从 HealthService 加载最近 N 天的真实数据
+  ///
+  /// 伪代码思路：
+  ///   遍历最近 _chartDays 天 -> 获取每天的 finalScore
+  ///   有数据则用 finalScore，无数据则为 0
+  ///   同时记录今日数据用于标记点展示
+  void _loadDataFromService() {
+    final now = DateTime.now();
+    final points = <FlSpot>[];
 
-  void _loadTodayData() {
+    for (int i = _chartDays - 1; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final dayData = _healthService.getDataForDate(date);
+      final score = dayData.finalScore?.toDouble() ?? 0.0;
+      points.add(FlSpot((_chartDays - 1 - i).toDouble(), score));
+    }
+
     setState(() {
-      _todayData = _healthService.getDataForDate(DateTime.now());
+      _dataPoints = points;
+      _todayData = _healthService.getDataForDate(now);
     });
   }
 
@@ -123,8 +134,8 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
         setState(() {
           _dataPoints = newData;
         });
-        // 弹窗关闭后重新加载今日数据以更新标记点
-        _loadTodayData();
+        // 弹窗关闭后重新从 Service 加载最新数据
+        _loadDataFromService();
       },
     );
   }
@@ -167,7 +178,7 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
                     borderData: FlBorderData(show: false),
                     lineTouchData: const LineTouchData(enabled: false), // 禁用图表触摸
                     minX: 0,
-                    maxX: 9.3, // 留出右边空间显示完整的标记点
+                    maxX: (_chartDays - 1).toDouble() + 0.3, // 留出右边空间显示完整的标记点
                     minY: 0,   // Y轴最小值固定为 0
                     maxY: 100, // Y轴最大值固定为 100
                     clipData: const FlClipData.all(), // 裁剪超出范围的数据
@@ -208,18 +219,40 @@ class _HealthCardWidgetState extends State<HealthCardWidget> {
           ),
           const SizedBox(height: 16),
 
-          // 底部统计信息
+          // 底部统计信息（从真实数据计算）
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatItem('Avg', '85', isPrimary: true),
-              _buildStatItem('Max', '98'),
-              _buildStatItem('Min', '60'),
+              _buildStatItem('Avg', _calcAvg()),
+              _buildStatItem('Max', _calcMax()),
+              _buildStatItem('Min', _calcMin()),
             ],
           ),
         ],
       ),
     );
+  }
+
+  /// 计算有效数据点（排除值为 0 且无真实记录的天数）的平均值
+  String _calcAvg() {
+    final validPoints = _dataPoints.where((p) => p.y > 0).toList();
+    if (validPoints.isEmpty) return '-';
+    final avg = validPoints.map((p) => p.y).reduce((a, b) => a + b) / validPoints.length;
+    return avg.round().toString();
+  }
+
+  /// 计算有效数据点中的最大值
+  String _calcMax() {
+    final validPoints = _dataPoints.where((p) => p.y > 0).toList();
+    if (validPoints.isEmpty) return '-';
+    return validPoints.map((p) => p.y).reduce((a, b) => a > b ? a : b).round().toString();
+  }
+
+  /// 计算有效数据点中的最小值
+  String _calcMin() {
+    final validPoints = _dataPoints.where((p) => p.y > 0).toList();
+    if (validPoints.isEmpty) return '-';
+    return validPoints.map((p) => p.y).reduce((a, b) => a < b ? a : b).round().toString();
   }
 
   Widget _buildStatItem(String label, String value, {bool isPrimary = false}) {
